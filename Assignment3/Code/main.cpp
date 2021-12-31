@@ -185,7 +185,8 @@ Eigen::Vector3f phong_fragment_shader(const fragment_shader_payload& payload)
         auto I = light.intensity/std::pow(light_dir.norm(),2.0);
         auto diffuse = (std::max(normal.normalized().dot(light_dir.normalized()), 0.0f))*kd.cwiseProduct(I);
         auto view_dir = eye_pos - point;
-        auto specular = std::pow((light_dir+view_dir).normalized().dot(normal.normalized()), 150.0) *ks.cwiseProduct(I);
+        auto specular = std::pow((light_dir+view_dir).normalized().dot(normal.normalized()), 120.0) *ks.cwiseProduct(I);
+        // auto specular = Eigen::Vector3f({0,0,0});
         result_color += (specular+diffuse);
     }
 

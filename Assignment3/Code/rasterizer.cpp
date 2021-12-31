@@ -300,14 +300,19 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
                 // float zp = alpha * view_pos[0].z() / view_pos[0].w() + beta * view_pos[1].z() / view_pos[1].w() + gamma * view_pos[2].z() / view_pos[2].w();
                 // zp *= Z;
 
-                float zp = 1.0/(alpha / view_pos[0].z() + beta / view_pos[1].z() + gamma / view_pos[2].z());
+                float Z = 1.0 / (alpha / t.v[0].w() + beta / t.v[1].w() + gamma / t.v[2].w());
+                float zp = alpha * v[0].z() / t.v[0].w() + beta * v[1].z() / t.v[1].w() + gamma * v[2].z() / t.v[2].w();
+                zp *= Z;
+
+                // float zp = 1.0/(alpha / view_pos[0].z() + beta / view_pos[1].z() + gamma / view_pos[2].z());
+
+                auto alpha_ = alpha/view_pos[0].z()*zp;
+                auto beta_ = beta/view_pos[1].z()*zp;
+                auto gamma_ = gamma/view_pos[2].z()*zp;
 
                 if(depth_buf[x*height+y] == std::numeric_limits<float>::infinity() || depth_buf[x*height+y]<zp) {
                     depth_buf[x*height+y] = zp;
                     // HW3 start here
-                    auto alpha_ = alpha/view_pos[0].z()*zp;
-                    auto beta_ = beta/view_pos[1].z()*zp;
-                    auto gamma_ = gamma/view_pos[2].z()*zp;
 
 
                     auto interpolated_color = interpolate(alpha_, beta_, gamma_, t.color[0], t.color[1], t.color[2], 1.0);
@@ -320,6 +325,7 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
 
                     auto pixel_color = fragment_shader(payload);
                     set_pixel(Eigen::Vector2i({x, y}), pixel_color);
+                    set_pixel(Eigen::Vector2i({x, y}), Eigen::Vector3f({148,121.0,92.0}));
                 }
             }
         }
