@@ -305,10 +305,11 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
                 zp *= Z;
 
                 // float zp = 1.0/(alpha / view_pos[0].z() + beta / view_pos[1].z() + gamma / view_pos[2].z());
-
-                auto alpha_ = alpha/view_pos[0].z()*zp;
-                auto beta_ = beta/view_pos[1].z()*zp;
-                auto gamma_ = gamma/view_pos[2].z()*zp;
+                //std::cout << t.v[0].w() << " ," << view_pos[0].z() << std::endl;
+                auto alpha_ = alpha/t.v[0].w()*Z;
+                
+                auto beta_ = beta/t.v[1].w()*Z;
+                auto gamma_ = gamma/t.v[2].w()*Z;
 
                 if(depth_buf[x*height+y] == std::numeric_limits<float>::infinity() || depth_buf[x*height+y]<zp) {
                     depth_buf[x*height+y] = zp;
@@ -316,16 +317,15 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
 
 
                     auto interpolated_color = interpolate(alpha_, beta_, gamma_, t.color[0], t.color[1], t.color[2], 1.0);
-                    auto interpolated_norm =  interpolate(alpha_, beta_, gamma_, t.normal[0], t.normal[1], t.normal[2], 1.0);
+                    auto interpolated_norm =  interpolate(alpha_, beta_, gamma_, t.normal[0], t.normal[1], t.normal[2], 1.0).normalized();
                     auto interpolated_shadingcoords = interpolate(alpha_, beta_, gamma_, view_pos[0], view_pos[1], view_pos[2], 1.0);
-                    auto interpolated_texcoords = Eigen::Vector2f();
+                    auto interpolated_texcoords = interpolate(alpha_, beta_, gamma_, t.tex_coords[0], t.tex_coords[1], t.tex_coords[2], 1.0);
                     
-                    fragment_shader_payload payload(interpolated_color, interpolated_norm, interpolated_texcoords, nullptr);
+                    fragment_shader_payload payload(interpolated_color, interpolated_norm, interpolated_texcoords, texture ? &*texture : nullptr);
                     payload.view_pos = interpolated_shadingcoords;
 
                     auto pixel_color = fragment_shader(payload);
                     set_pixel(Eigen::Vector2i({x, y}), pixel_color);
-                    set_pixel(Eigen::Vector2i({x, y}), Eigen::Vector3f({148,121.0,92.0}));
                 }
             }
         }

@@ -18,6 +18,7 @@ public:
         cv::cvtColor(image_data, image_data, cv::COLOR_RGB2BGR);
         width = image_data.cols;
         height = image_data.rows;
+        std::cout << width << ", " << height << std::endl;
     }
 
     int width, height;
