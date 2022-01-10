@@ -1,11 +1,20 @@
-#include <eigen3/Eigen/Eigen>
 #include <iostream>
+#include <format>
+#include <string_view>
 
+struct point {
+    int x;
+    int y;
+    operator std::string_view() {
+        return "{" + std::to_string(x) + "," + std::to_string(y) + "}";
+    }
+}
 
 int main() {
-	Eigen::Vector3f v({1.0, 1.0, 1.0});
-	Eigen::Vector3f v1({1.1, 1.1, 1.1});
-	std::cout << v.dot(v1) << std::endl;
+    point p;
+    p.x = 10;
+    p.y = 20;
+    std::format("point: {}", p);
 }
 
 
