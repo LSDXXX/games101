@@ -65,34 +65,49 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
     auto hit = this->intersect(ray);
     if(hit.happened) {
         if(hit.obj->hasEmit()) {
-            return hit.emit;
+            if(depth == 0) {
+                hit_color = hit.emit;
+            } 
+            return hit_color;
         }
         Vector3f L_light(0.0f), L_object(0.0f);
         // calculate light
         float pdf_light;
         Intersection light_sample;
         sampleLight(light_sample, pdf_light);
-        auto pos_to_light_dir = light_sample.coords - hit.coords;
-        auto pos_to_light_distance = std::sqrt(dotProduct(pos_to_light_dir, pos_to_light_dir));
-        pos_to_light_dir = normalize(pos_to_light_dir);
+        auto tmp= light_sample.coords - hit.coords;
+        // auto pos_to_light_distance =dotProduct(pos_to_light_dir, pos_to_light_dir);
+        auto pos_to_light_dir = normalize(tmp);
+        float pos_to_light_distance = 0.f;
+        if(std::abs(pos_to_light_dir.x) > std::abs(pos_to_light_dir.y)&&
+            std::abs(pos_to_light_dir.x) > std::abs(pos_to_light_dir.z)) {
+            pos_to_light_distance = tmp.x / pos_to_light_dir.x;
+        } else if(std::abs(pos_to_light_dir.y) > std::abs(pos_to_light_dir.z)) {
+            pos_to_light_distance = tmp.y / pos_to_light_dir.y;
+        } else {
+            pos_to_light_distance = tmp.z / pos_to_light_dir.z;
+        }
         Ray pos_to_light_ray(hit.coords, pos_to_light_dir);
         auto is_shadow = this->intersect(pos_to_light_ray);
         // std::cout << is_shadow.happened << ", " << is_shadow.distance << ", " << pos_to_light_distance << std::endl;
-        if(!is_shadow.happened || is_shadow.distance > pos_to_light_distance) {
+        if(!is_shadow.happened || is_shadow.distance+ 100*EPSILON > pos_to_light_distance) {
             auto cos_theta = dotProduct(hit.normal, pos_to_light_dir);
             auto fr = hit.m->eval(-1*pos_to_light_dir,-1*ray.direction, hit.normal);
             auto cos_theta_ = -dotProduct(light_sample.normal, pos_to_light_dir);
-            L_light = light_sample.emit*cos_theta*cos_theta_*fr/pdf_light/(pos_to_light_distance*pos_to_light_distance);
+            if(cos_theta*cos_theta_ > 0) {
+                L_light = light_sample.emit*cos_theta*cos_theta_*fr/pdf_light/(pos_to_light_distance*pos_to_light_distance);
+            }
         }
 
         // calculate diffuse object
-        Intersection diffuse_sample;
-        auto dir = hit.m->sample(ray.direction, hit.normal);
-        float pdf_diffuse = hit.m->pdf(ray.direction, dir, hit.normal);
-        if(!hit.obj->hasEmit() && get_random_float() < RussianRoulette) {
+        if(get_random_float() < RussianRoulette) {
+            Intersection diffuse_sample;
+            auto dir = normalize(hit.m->sample(ray.direction, hit.normal));
+            float pdf_diffuse = hit.m->pdf(ray.direction, dir, hit.normal);
+            Ray bounce(hit.coords+hit.normal*300*EPSILON, dir);
             auto fr = hit.m->eval(-1*dir, -1*ray.direction, hit.normal);
             auto cos_theta = dotProduct(hit.normal, dir);
-            L_object = fr*cos_theta*this->castRay(Ray(hit.coords, dir), depth+1)/pdf_diffuse/RussianRoulette;
+            L_object = fr*cos_theta*this->castRay(bounce, depth+1)/pdf_diffuse/RussianRoulette;
         }
         hit_color = L_light + L_object;
     }
