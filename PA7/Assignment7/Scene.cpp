@@ -94,6 +94,7 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
             auto cos_theta = dotProduct(hit.normal, pos_to_light_dir);
             auto fr = hit.m->eval(-1*pos_to_light_dir,-1*ray.direction, hit.normal);
             auto cos_theta_ = -dotProduct(light_sample.normal, pos_to_light_dir);
+            if(pdf_light < EPSILON) std::cout << pdf_light << std::endl;
             if(cos_theta*cos_theta_ > 0) {
                 L_light = light_sample.emit*cos_theta*cos_theta_*fr/pdf_light/(pos_to_light_distance*pos_to_light_distance);
             }
@@ -104,12 +105,17 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
             Intersection diffuse_sample;
             auto dir = normalize(hit.m->sample(ray.direction, hit.normal));
             float pdf_diffuse = hit.m->pdf(ray.direction, dir, hit.normal);
-            Ray bounce(hit.coords+hit.normal*300*EPSILON, dir);
+            Ray bounce(hit.coords+hit.normal*EPSILON, dir);
             auto fr = hit.m->eval(-1*dir, -1*ray.direction, hit.normal);
             auto cos_theta = dotProduct(hit.normal, dir);
-            L_object = fr*cos_theta*this->castRay(bounce, depth+1)/pdf_diffuse/RussianRoulette;
+            auto L = this->castRay(bounce, depth+1);
+            L_object = fr*cos_theta*L/pdf_diffuse/RussianRoulette;
         }
+        
         hit_color = L_light + L_object;
+        // if(hit_color.x > 1.f && hit_color.y > 1.f && hit_color.z > 1.f) {
+        //     std::cout << hit_color << std::endl;
+        // }
     }
     return hit_color;
 }

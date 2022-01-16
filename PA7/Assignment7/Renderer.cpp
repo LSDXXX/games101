@@ -6,6 +6,8 @@
 #include <future>
 #include "Scene.hpp"
 #include "Renderer.hpp"
+#include "threadpool.hpp"
+#include <tuple>
 
 
 inline float deg2rad(const float& deg) { return deg * M_PI / 180.0; }
@@ -24,9 +26,12 @@ void Renderer::Render(const Scene& scene)
     Vector3f eye_pos(278, 273, -800);
     int m = 0;
 
+    ThreadPool pool(4);
+
     // change the spp value to change sample ammount
-    int spp = 16;
+    int spp = 100;
     std::cout << "SPP: " << spp << "\n";
+    std::vector<std::future<std::tuple<int, Vector3f>>> results;
     for (uint32_t j = 0; j < scene.height; ++j) {
         for (uint32_t i = 0; i < scene.width; ++i) {
             // generate primary ray direction
@@ -35,17 +40,23 @@ void Renderer::Render(const Scene& scene)
             float y = (1 - 2 * (j + 0.5) / (float)scene.height) * scale;
 
             Vector3f dir = normalize(Vector3f(-x, y, 1));
-            std::vector<std::future<Vector3f>> results;
-            for (int k = 0; k < spp; k++){
-                results.push_back(std::async(std::launch::async|std::launch::deferred, &Scene::castRay, &scene, Ray(eye_pos, dir), 0));
-                // framebuffer[m] += scene.castRay(Ray(eye_pos, dir), 0) / spp;  
-            }
-            for(int i = 0; i < results.size(); i++) {
-                framebuffer[m] += results[i].get()/spp;
-            }
+            auto ray = Ray(eye_pos, dir);
+            auto fn = [&scene, spp](int m, Ray ray) {
+                Vector3f result(0.f);
+                for(int k = 0; k < spp; k++) {
+                    result += scene.castRay(ray, 0)/spp;
+                }
+                return std::tuple<int, Vector3f>({m, result});
+            };
+            results.push_back(pool.enqueue(fn, m, ray));
             m++;
         }
-        UpdateProgress(j / (float)scene.height);
+        // UpdateProgress(j / (float)scene.height);
+    }
+    for(int i = 0; i < results.size(); i++) {
+        auto[m, res] = results[i].get();
+        framebuffer[m] = res;
+        UpdateProgress(i / (float)scene.height/scene.width);
     }
     UpdateProgress(1.f);
 
