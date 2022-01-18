@@ -3,11 +3,8 @@
 //
 
 #include <fstream>
-#include <future>
 #include "Scene.hpp"
 #include "Renderer.hpp"
-#include "threadpool.hpp"
-#include <tuple>
 
 
 inline float deg2rad(const float& deg) { return deg * M_PI / 180.0; }
@@ -24,15 +21,15 @@ void Renderer::Render(const Scene& scene)
     float scale = tan(deg2rad(scene.fov * 0.5));
     float imageAspectRatio = scene.width / (float)scene.height;
     Vector3f eye_pos(278, 273, -800);
-    float mMax = (float)scene.height * (float)scene.width;
     int m = 0;
-
-    ThreadPool pool(1);
+    float mMax = (float)scene.height * (float)scene.width;
 
     // change the spp value to change sample ammount
-    int spp = 1;
+    int spp = 1; // 16;
+    // float gamma_corr = 2.2;
     std::cout << "SPP: " << spp << "\n";
-    std::vector<std::future<std::tuple<int, Vector3f>>> results;
+    // omp_set_num_threads(8);
+    #pragma omp parallel for num_threads(8) collapse(2) schedule(dynamic, 4)
     for (uint32_t j = 0; j < scene.height; ++j) {
         for (uint32_t i = 0; i < scene.width; ++i) {
             // generate primary ray direction
@@ -41,45 +38,27 @@ void Renderer::Render(const Scene& scene)
             float y = (1 - 2 * (j + 0.5) / (float)scene.height) * scale;
 
             Vector3f dir = normalize(Vector3f(-x, y, 1));
-            auto ray = Ray(eye_pos, dir);
-            auto fn = [&scene](int m, Ray ray, int spp) {
-                Vector3f result(0.f);
-                for(int k = 0; k < spp; k++) {
-                    result += scene.castRay(ray, 0)/spp;
-                }
-                return std::tuple<int, Vector3f>({m, result});
-            };
-            results.push_back(pool.enqueue(fn, m, ray, spp));
-            m++;
-        }
-        // UpdateProgress(j / (float)scene.height);
-    }
-    for(int i = 0; i < results.size(); i++) {
-        auto[m, res] = results[i].get();
-        framebuffer[m] = res;
-        UpdateProgress(i / (float)scene.height/scene.width);
-    }
-   /*
-    for (uint32_t j = 0; j < scene.height; ++j) {
-        for (uint32_t i = 0; i < scene.width; ++i) {
-            // generate primary ray direction
-            float x = (2 * (i + 0.5) / (float)scene.width - 1) *
-                      imageAspectRatio * scale;
-            float y = (1 - 2 * (j + 0.5) / (float)scene.height) * scale;
-
-            Vector3f dir = normalize(Vector3f(-x, y, 1));
-            auto ray = Ray(eye_pos, dir);
-            auto color = Vector3f(0.0);
-            for(int k = 0; k < spp; k++) {
-                color += scene.castRay(ray, 0) / spp;
+            thread_local Vector3f color;
+            color = Vector3f(0.0);
+            // USER_NOTE: randomly generate spp rays
+            // scene.castRay: check hit & do shading on hit point
+            for (int k = 0; k < spp; k++){
+                color += scene.castRay(Ray(eye_pos, dir), 0) / spp;
+                // gamma correction
+                // color.x = pow(color.x, 1.0/gamma_corr);
+                // color.y = pow(color.y, 1.0/gamma_corr);
+                // color.z = pow(color.z, 1.0/gamma_corr);
             }
             framebuffer[j*scene.width + i] += color;
-            m++;
+            #pragma omp critical
+            {
+                m++;
+                UpdateProgress((float)m / mMax);
+            }
         }
-        UpdateProgress(j / (float)scene.height);
+        // USER_NOTE: disabled for parallelism
+        // UpdateProgress(j / (float)scene.height); 
     }
-    */
-
     UpdateProgress(1.f);
 
     // save framebuffer to file

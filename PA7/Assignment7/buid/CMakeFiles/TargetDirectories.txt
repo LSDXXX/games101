@@ -1,0 +1,3 @@
+/Users/sidaliang/code/graphics/PA7/Assignment7/buid/CMakeFiles/rebuild_cache.dir
+/Users/sidaliang/code/graphics/PA7/Assignment7/buid/CMakeFiles/edit_cache.dir
+/Users/sidaliang/code/graphics/PA7/Assignment7/buid/CMakeFiles/RayTracing.dir

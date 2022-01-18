@@ -7,7 +7,7 @@
 
 #include "Vector.hpp"
 
-enum MaterialType { DIFFUSE};
+enum MaterialType { DIFFUSE, MICROFACET};
 
 class Material{
 private:
@@ -85,6 +85,70 @@ private:
         return a.x * B + a.y * C + a.z * N;
     }
 
+    float GGX_D(float roughness, float nwm)  {
+        /*
+        auto roughness2 = roughness*roughness;
+        auto nwm2 = nwm*nwm;
+        auto tmp = nwm2*(roughness2-1)+1;
+        return roughness2/(M_PI*tmp*tmp);
+        */
+        auto roughness2 = roughness*roughness;
+        auto nwm2 = nwm*nwm;
+        float tmp = (nwm2-1) / (roughness2*nwm2);
+        return std::exp(tmp) / (roughness2*std::pow(nwm, 4.0));
+    }
+
+    float Smith_G(float roughness, float ni, float nr, float nh, float im) {
+        auto G1 = 2*nh*ni/im;
+        auto G2 = 2*nh*nr/im;
+        return  std::min(1.0f, std::min(G1, G2));
+    }
+
+    float eval_microfacet(
+    const Vector3f &wi, const Vector3f &wo, const Vector3f &N,
+    const float &ior, const float &roughness
+){
+    float eps = 1e-6;
+    Vector3f h = normalize(wi + wo);
+    float N_dot_wo = std::max(0.0f, dotProduct(wo, N));
+    float N_dot_wi = std::max(0.0f, dotProduct(wi, N));
+    float N_dot_h = std::max(0.0f, dotProduct(h, N));
+    float m = roughness; //rms slope, roughness
+    // fresnel term, exact form
+    float F;
+    fresnel(wi, N, ior, F);
+    // shadow masking term
+    float G = 1;
+    float G1 = 2 * N_dot_h * N_dot_wo
+                    / std::max(0.0f, dotProduct(wo, h));
+    float G2 = 2 * N_dot_h * N_dot_wi
+                    / std::max(0.0f, dotProduct(wo, h));
+    G = std::min({G, G1, G2});
+
+    // G = std::max(G, 0.0f);
+    // normal distribution, beckman distribution
+    float D;
+    float m2 = m*m;
+    float chi_Nh = (float)(N_dot_h > 0);
+    float alpha = acos(N_dot_h);
+    float tan_alpha = tan(alpha);
+    float cos_alpha = cos(alpha);
+    float cos_alpha2 = cos_alpha*cos_alpha;
+    float cos_alpha4 = cos_alpha2*cos_alpha2;
+    D = chi_Nh * exp(-tan_alpha*tan_alpha / m2) 
+                / M_PI / m2 / cos_alpha4;
+
+    // float ker_dist = N_dot_h / m;
+    // D = exp(-ker_dist*ker_dist);
+
+    // USER_NOTE:
+    // use the cook-torrance formula on wiki, page: Specular_highlight
+    // float fr = (F*G*D) / 4 / std::max(eps, N_dot_wi*N_dot_wo);
+    float fr = (F*G*D) / M_PI / std::max(eps, N_dot_wi*N_dot_wo);
+    // std::clog << fr << std::endl;
+    return fr;
+}
+
 public:
     MaterialType m_type;
     //Vector3f m_color;
@@ -92,6 +156,7 @@ public:
     float ior;
     Vector3f Kd, Ks;
     float specularExponent;
+    float roughness;
     //Texture tex;
 
     inline Material(MaterialType t=DIFFUSE, Vector3f e=Vector3f(0,0,0));
@@ -114,6 +179,7 @@ Material::Material(MaterialType t, Vector3f e){
     m_type = t;
     //m_color = c;
     m_emission = e;
+    roughness = 0.8;
 }
 
 MaterialType Material::getType(){return m_type;}
@@ -152,14 +218,29 @@ float Material::pdf(const Vector3f &wi, const Vector3f &wo, const Vector3f &N){
             // uniform sample probability 1 / (2 * PI)
             if (dotProduct(wo, N) > 0.0f)
                 return 0.5f / M_PI;
-            else
+            else {
                 return 0.0f;
+            }
             break;
         }
     }
 }
 
 Vector3f Material::eval(const Vector3f &wi, const Vector3f &wo, const Vector3f &N){
+    /*
+        auto wm = normalize(wo-wi);
+        auto nwi = dotProduct(N, wi), nwo = dotProduct(N, wo),
+        nwm = dotProduct(N, wm);
+    
+        auto D = this->GGX_D(this->roughness, nwm);
+        auto G = this->Smith_G(this->roughness, nwi, nwo);
+        float F = 0.f;
+        this->fresnel(wi, N, this->ior, F);
+
+        auto res = F*std::max(D*G/(4*std::fabs(nwi)*std::fabs(nwo)), 0.f);
+        return res;
+        */
+
     switch(m_type){
         case DIFFUSE:
         {
@@ -172,6 +253,41 @@ Vector3f Material::eval(const Vector3f &wi, const Vector3f &wo, const Vector3f &
             else
                 return Vector3f(0.0f);
             break;
+        }
+        case MICROFACET: 
+        {
+            // impl microfacet
+            /* 
+            auto i = wi;
+            auto r = wo;
+            auto m = normalize(r + i);
+            auto ni = dotProduct(N, i), nr = dotProduct(N, r),
+            nm = dotProduct(N, m), im = dotProduct(i,m);
+            float res = 0.f;
+    
+            if(ni*nr > 100*EPSILON) {
+                auto D = this->GGX_D(this->roughness, nm);
+                auto G = this->Smith_G(this->roughness, ni, nr, nm, im);
+                float F = 0.f;
+                this->fresnel(i, N, this->ior, F);
+
+                res = F*F*D*G/(4*ni*nr);
+            }
+            if(res > 1.f) 
+             {
+            //      std::cout << res << " F: " << F << " D:" << D 
+            //  << " G:" << G << " nwm: " << nwm << " nwi: " << nwi << " nwo: " << nwo << std::endl;
+                res = 1.f;
+             }
+
+            // std::cout << res << std::endl;
+            // std::cout << "wm:" << wm << std::endl;
+            // std::cout << "wi:" << wi << std::endl;
+            // std::cout << "wo:" << wo << std::endl;
+            // std::cout << "N:" << N << std::endl;
+            return res;
+            */
+           return 0.3*eval_microfacet(wi, wo, N, this->ior, this->roughness);
         }
     }
 }
