@@ -14,6 +14,10 @@ inline float deg2rad(const float& deg) { return deg * M_PI / 180.0; }
 
 const float EPSILON = 0.00001;
 
+Vector3f gammacorrection(const Vector3f& color, float gamma) {
+    return Vector3f(std::pow(color.x, 1.f/gamma), std::pow(color.y, 1.f/gamma), std::pow(color.z, 1.f/gamma));
+}
+
 // The main render function. This where we iterate over all pixels in the image,
 // generate primary rays and cast these rays into the scene. The content of the
 // framebuffer is saved to a file.
@@ -27,10 +31,10 @@ void Renderer::Render(const Scene& scene)
     float mMax = (float)scene.height * (float)scene.width;
     int m = 0;
 
-    ThreadPool pool(1);
+    ThreadPool pool(4);
 
     // change the spp value to change sample ammount
-    int spp = 1;
+    int spp = 16;
     std::cout << "SPP: " << spp << "\n";
     std::vector<std::future<std::tuple<int, Vector3f>>> results;
     for (uint32_t j = 0; j < scene.height; ++j) {
@@ -59,6 +63,8 @@ void Renderer::Render(const Scene& scene)
         framebuffer[m] = res;
         UpdateProgress(i / (float)scene.height/scene.width);
     }
+
+
    /*
     for (uint32_t j = 0; j < scene.height; ++j) {
         for (uint32_t i = 0; i < scene.width; ++i) {
@@ -73,7 +79,7 @@ void Renderer::Render(const Scene& scene)
             for(int k = 0; k < spp; k++) {
                 color += scene.castRay(ray, 0) / spp;
             }
-            framebuffer[j*scene.width + i] += color;
+            framebuffer[j*scene.width + i] += gammacorrection(color, 2.2);
             m++;
         }
         UpdateProgress(j / (float)scene.height);

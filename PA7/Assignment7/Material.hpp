@@ -104,10 +104,32 @@ private:
         return  std::min(1.0f, std::min(G1, G2));
     }
 
+    Vector3f eval_diffuse(const Vector3f& N, const Vector3f& wo) {
+        float cosalpha = dotProduct(N, wo);
+            if (cosalpha > 0.0f) {
+                Vector3f diffuse = Kd / M_PI;
+                return diffuse;
+            }
+            else
+                return Vector3f(0.0f);
+    }
+
     float eval_microfacet(
     const Vector3f &wi, const Vector3f &wo, const Vector3f &N,
     const float &ior, const float &roughness
 ){
+
+    float F = 0.f;
+    fresnel(wi, N, ior, F);
+
+    auto wm = normalize(wi+wo);
+    
+    auto D = GGX_D(roughness, dotProduct(N, wm));
+
+    auto G = Smith_G(roughness, dotProduct(wi, N), dotProduct(wo, N), dotProduct(N, wm), dotProduct(wm, wi));
+
+    auto fr = F*G*D / 4/ std::max(EPSILON, dotProduct(N,wo)*dotProduct(N,wi));
+    /*
     float eps = 1e-6;
     Vector3f h = normalize(wi + wo);
     float N_dot_wo = std::max(0.0f, dotProduct(wo, N));
@@ -144,8 +166,10 @@ private:
     // USER_NOTE:
     // use the cook-torrance formula on wiki, page: Specular_highlight
     // float fr = (F*G*D) / 4 / std::max(eps, N_dot_wi*N_dot_wo);
-    float fr = (F*G*D) / M_PI / std::max(eps, N_dot_wi*N_dot_wo);
+    std::cout << "F: " << F << "G " << G << "D " << D << std::endl;
+    float fr = (F*G*D) / 4/ std::max(eps, N_dot_wi*N_dot_wo);
     // std::clog << fr << std::endl;
+    */
     return fr;
 }
 
@@ -208,6 +232,17 @@ Vector3f Material::sample(const Vector3f &wi, const Vector3f &N){
             
             break;
         }
+        case MICROFACET:
+        {
+            float x_1 = get_random_float(), x_2 = get_random_float();
+            float z = std::fabs(1.0f - 2.0f * x_1);
+            float r = std::sqrt(1.0f - z * z), phi = 2 * M_PI * x_2;
+            Vector3f localRay(r*std::cos(phi), r*std::sin(phi), z);
+            return toWorld(localRay, N);
+            
+            break;
+        }
+
     }
 }
 
@@ -223,6 +258,16 @@ float Material::pdf(const Vector3f &wi, const Vector3f &wo, const Vector3f &N){
             }
             break;
         }
+        case MICROFACET:
+        {
+            if (dotProduct(wo, N) > 0.0f)
+                return 0.5f / M_PI;
+            else {
+                return 0.0f;
+            }
+            break;
+        }
+
     }
 }
 
@@ -287,7 +332,11 @@ Vector3f Material::eval(const Vector3f &wi, const Vector3f &wo, const Vector3f &
             // std::cout << "N:" << N << std::endl;
             return res;
             */
-           return 0.3*eval_microfacet(wi, wo, N, this->ior, this->roughness);
+           auto fr =eval_microfacet(wi, wo, N, this->ior, this->roughness);
+           auto fd = eval_diffuse(N, wo);
+           
+           if(!isValidF(fr)) std::cout << fr << std::endl;
+           return 0.7*fd + 0.3* fr;
         }
     }
 }

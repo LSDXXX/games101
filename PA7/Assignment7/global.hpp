@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cmath>
 #include <random>
+#include <mutex>
 
 #undef M_PI
 #define M_PI 3.141592653589793f
@@ -28,13 +29,14 @@ inline  bool solveQuadratic(const float &a, const float &b, const float &c, floa
     return true;
 }
 
+
 inline float get_random_float()
 {
-    static thread_local  std::random_device dev;
-    static thread_local std::mt19937 rng(dev());
+    thread_local static std::random_device dev;
+    thread_local static std::mt19937 rng(dev());
     std::uniform_real_distribution<float> dist(0.f, 1.f); // distribution in range [1, 6]
-
-    return dist(rng);
+    auto res = dist(rng);
+    return res;
 }
 
 inline void UpdateProgress(float progress)
